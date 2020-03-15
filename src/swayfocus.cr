@@ -2,7 +2,6 @@ require "json"
 require "option_parser"
 
 version = "0.1"
-puts ""
 
 class Window
     JSON.mapping({
@@ -24,36 +23,23 @@ end
 def node_loop (root : Window)
     list = [] of Window
     root.nodes.each do |node|
-        if(node.wtype == "con")
+        if node.wtype == "con"
             list << node
-        elsif(node.nodes != [] of Window)
-            list.concat(node_loop(node))
+        elsif !node.nodes.empty?
+            list.concat node_loop node
         end
     end
-    return list
+    list
 end
 
 client_tree = Window.from_json(`swaymsg -t get_tree`)
 
-if(client_tree.wtype != "root")
+if client_tree.wtype != "root"
     puts "Malformed client tree."
     exit(1)
 end
 
-window_list = node_loop(client_tree)
-
-def parse_marks(marks : Array(String), mark : String)
-    res : Bool = false
-    marks.each do |cm|
-    	if(cm.includes? mark)
-    	   res = true
-    	end
-    end
-    return !res
-end
-
-def check_type
-end
+window_list = node_loop client_tree
 
 cycle = false
 OptionParser.parse do |parser|
@@ -81,45 +67,42 @@ OptionParser.parse do |parser|
     end
 
     parser.on "-n WNAME", "--name=WNAME", "Match against window name" do |wname|
-	window_list.reject! {|w| !w.name.includes? wname}
+	window_list.select! {|w| w.name.includes? wname}
     end
 
     parser.on "-m WMARK", "--mark=WMARK", "Match against window mark" do |wmark|
-    	window_list.reject! {|w| parse_marks(w.marks, wmark)}
+    	window_list.reject! {|w| w.marks.none?{|m| m.includes? wmark}}
     end
 
     parser.on "-t WTYPE", "--type=WTYPE", "Match against window type (app_id for wayland, class for xwayland)" do |wtype|
-    	window_list.reject! {|w| !(w.app_id.includes?(wtype) || w.wclass.includes?(wtype))}
+    	window_list.select! {|w| w.app_id.includes?(wtype) || w.wclass.includes?(wtype)}
     end
-    
+  
     parser.invalid_option do |flag|
         STDERR.puts "#{flag} is not a valid option"
-        STDERR.puts ""
         STDERR.puts parser
         exit(1)
     end
 
     parser.missing_option do |flag|
     	STDERR.puts "#{flag} requires an argument"
-    	STDERR.puts ""
     	STDERR.puts parser
     	exit(1)
     end
-
-    parser.unknown_args do
-    	exit(0)
-    end
 end
 
-if(window_list == [] of Window)
+if window_list.empty?
     puts "No matching window."
     exit(1)
 end
-if(cycle)
-    while(!window_list[window_list.size - 1].focused)
-    	window_list.push window_list[0]
-    	window_list.delete_at(0)
-    end
-end
 
-Process.exec("swaymsg", [%<[con_id=>+window_list[0].id.to_s+%<]>,"focus"])
+if cycle
+    windex = window_list.index {|w| w.focused}
+    if windex.nil? || windex == window_list.size - 1
+        windex = -1
+    end
+    windex += 1
+    Process.exec("swaymsg", ["[con_id=#{window_list[windex].id.to_s}]","focus"])
+else
+    Process.exec("swaymsg", ["[con_id=#{window_list[0].id.to_s}]","focus"])
+end
