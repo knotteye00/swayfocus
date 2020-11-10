@@ -1,3 +1,6 @@
+# This repository is a mirror
+Head to https://pond.waldn.net/git/knotteye/swayfocus to contribute
+
 # SWAYFOCUS - Window Switching Tool For Sway
 
 A tool to focus a specific window in sway, useful for run or raise scripts that would have used xdotool or wmctrl under Xorg.
